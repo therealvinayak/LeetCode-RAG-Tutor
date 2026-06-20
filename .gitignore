@@ -1,0 +1,14 @@
+# Local database and tracking data (Ignore these)
+chroma_db/
+sync_manifest.json
+
+# Environment secrets (Ignore this)
+.env
+
+# Virtual environment (Ignore this)
+venv/
+.venv/
+
+# System or IDE specific files
+.vscode/
+.DS_Store
