@@ -46,5 +46,3 @@ python app.py
 
 Still a small project, but it's already become my go-to tool for interview prep and revising old problem-solving patterns.
 
-```
-
