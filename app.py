@@ -1,6 +1,7 @@
 import os
 import json
 import hashlib
+import time
 from dotenv import load_dotenv
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -10,38 +11,44 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 
-# Load the environment variables from the .env file
-load_dotenv() 
+# Core environmental configurations
+load_dotenv()
+if not os.environ.get("GROQ_API_KEY"):
+    raise ValueError("❌ Missing Environment Variable: Please check your root level .env file configuration.")
 
-# 1. ADD YOUR GROQ API KEY HERE
-# os.environ["GROQ_API_KEY"] = "PASTE_YOUR_NEW_GROQ_KEY_HERE"
-
-NOTES_DIR = "./notes"
-DB_DIR = "./chroma_db"
-MANIFEST_FILE = "./sync_manifest.json"
+# Deterministic Path Allocations
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+NOTES_DIR = os.path.join(BASE_DIR, "notes")
+DB_DIR = os.path.join(BASE_DIR, "chroma_db")
+MANIFEST_FILE = os.path.join(BASE_DIR, "sync_manifest.json")
 
 def compute_md5(file_path):
     hasher = hashlib.md5()
     with open(file_path, 'rb') as f:
-        buf = f.read()
-        hasher.update(buf)
+        while chunk := f.read(8192):
+            hasher.update(chunk)
     return hasher.hexdigest()
 
+# Load state tracker ledger
+manifest = {}
 if os.path.exists(MANIFEST_FILE):
-    with open(MANIFEST_FILE, 'r') as f:
-        manifest = json.load(f)
-else:
-    manifest = {}
+    try:
+        with open(MANIFEST_FILE, 'r') as f:
+            manifest = json.load(f)
+    except json.JSONDecodeError:
+        pass
 
+# Initialize Processing Infrastructure
 headers_to_split_on = [("##", "Problem_URL")]
 markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on, strip_headers=False)
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
+# Volatile initialization safely wrapping disk directories
 db = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
 new_or_updated_chunks = []
 manifest_updated = False
 
-print("Scanning for note updates...")
+print("🔍 Scanning for personal notes update matrices...")
 if not os.path.exists(NOTES_DIR):
     os.makedirs(NOTES_DIR)
 
@@ -51,40 +58,36 @@ for filename in os.listdir(NOTES_DIR):
         current_hash = compute_md5(file_path)
         
         if filename not in manifest or manifest[filename] != current_hash:
-            print(f"🔄 Processing changes in: {filename}")
+            print(f"🔄 Change Detected: Re-indexing {filename}")
             if filename in manifest:
+                # Target purge of historical document slices
                 db.delete(where={"source": filename})
             
-            with open(file_path, "r", encoding="utf-8") as f:
-                text = f.read()
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    text = f.read()
                 chunks = markdown_splitter.split_text(text)
                 for chunk in chunks:
                     chunk.metadata["source"] = filename
                 new_or_updated_chunks.extend(chunks)
-            
-            manifest[filename] = current_hash
-            manifest_updated = True
+                manifest[filename] = current_hash
+                manifest_updated = True
+            except Exception as e:
+                print(f"⚠️ Error parsing file {filename}: {str(e)}")
 
+# Synchronize local Vector Database instances
 if new_or_updated_chunks:
-    print(f"Adding {len(new_or_updated_chunks)} chunks to Vector DB...")
+    print(f"⚡ Batch Injecting {len(new_or_updated_chunks)} structural blocks into ChromaDB...")
     db.add_documents(new_or_updated_chunks)
-    print("Database updated successfully!")
+    print("✅ Local store updated.")
 else:
-    print("Everything is up to date.")
+    print("🎯 Vectors fully synchronized. No reprocessing needed.")
 
 if manifest_updated:
     with open(MANIFEST_FILE, 'w') as f:
         json.dump(manifest, f, indent=4)
 
-# ==================== EXTRA RAG & LLM INTEGRATION ====================
-
-# 2. Setup Retriever
-retriever = db.as_retriever(search_kwargs={"k": 6})
-
-# 3. Setup Groq LLM Client (using ultra-fast Llama 3)
-llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.2)
-
-# 4. Define Persona Prompt
+# Build Prompt Layout Strategies
 prompt_template = """
 You are an expert software engineering mentor helping a student review their past LeetCode solutions.
 Analyze the provided context notes carefully to answer their question.
@@ -121,13 +124,14 @@ Context notes:
 Question: {question}
 Answer:"""
 
+# Assemble Pipeline Components
+retriever = db.as_retriever(search_kwargs={"k": 4}) # Adjusted down slightly to maximize context concentration
+llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1) # Kept tight to prevent hallucination shifts
 prompt = ChatPromptTemplate.from_template(prompt_template)
 
-# Helper function to join documents together
 def format_docs(docs):
     return "\n\n".join([f"Source file: {d.metadata.get('source')}\n{d.page_content}" for d in docs])
 
-# 5. Build the LangChain RAG pipeline
 rag_chain = (
     {"context": retriever | format_docs, "question": RunnablePassthrough()}
     | prompt
@@ -136,27 +140,30 @@ rag_chain = (
 )
 
 print("\n" + "="*60)
-print("🤖 LeetCode RAG Tutor is Live! Type 'exit' to quit.")
+print("🤖 LeetCode RAG Tutor Shell Session Active. [Type 'exit' to close]")
 print("="*60 + "\n")
 
-# Interactive Chat Loop
 while True:
     user_query = input("You: ")
     if user_query.strip().lower() == 'exit':
-        print("Goodbye!")
+        print("Closing tutor engine session. Good luck with prep!")
         break
     if not user_query.strip():
         continue
         
-    print("\nSearching notes...")
+    print("\n🔍 Traversing ChromaDB Indices...")
+    start_time = time.time()
     
-    # DEBUG STEP: Let's see exactly what the database retrieves
     retrieved_docs = retriever.invoke(user_query)
-    print("📚 Retrieved Context Sources:")
+    print("📚 Retrieved Vector Matches:")
     for doc in retrieved_docs:
-        print(f"   - {doc.metadata.get('source')} (Snippet: {doc.page_content[:40]}...)")
+        print(f"   ↳ Source: {doc.metadata.get('source')} | Header: {list(doc.metadata.values())[0] if doc.metadata else 'N/A'}")
     
-    print("\nGenerating tutor response...")
+    print("\n🧠 Querying Llama-3.3 Framework via Groq Core...")
     response = rag_chain.invoke(user_query)
+    
+    latency = time.time() - start_time
     print(f"\nTutor:\n{response}")
-    print("\n" + "-"*60 + "\n")
+    print("\n" + "-"*60)
+    print(f"⏱️ Operational Query Execution Latency: {latency:.2f} seconds")
+    print("-"*60 + "\n")
