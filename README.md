@@ -48,8 +48,3 @@ Still a small project, but it's already become my go-to tool for interview prep 
 
 ```
 
-5. Scroll down to the bottom, write a casual commit summary like `docs: fix markdown formatting in readme`, and click **Commit changes**.
-
-Once saved, it will instantly render with beautifully structured headings, clean code syntax blocks, and high-impact bullet points!
-
-```
