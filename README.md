@@ -1,22 +1,4 @@
-That looks great on your profile—seeing those three files perfectly isolated with a casual, clean commit message means your Git workflow and security layers are running exactly as they should.
-
-The reason your `README.md` looks disorganized and rendered as a single continuous block of text is a standard **Markdown spacing quirk**.
-
-Markdown expects a full empty line (pressing Enter twice) between headers (`#`, `##`), bullet points (`*`, `-`), and regular text blocks. Because the text was pasted without those explicit empty breaks, GitHub’s parser smashed it all together into one giant paragraph.
-
----
-
-### 🛠️ The Fix
-
-You can fix this directly inside your browser without running any terminal commands!
-
-1. Go to your repository page on GitHub.
-2. Click on the **`README.md`** file in the file list.
-3. Click the **Pencil icon** (Edit this file) in the top-right corner.
-4. Select all the text, delete it, and paste this exact correctly-spaced version instead:
-
-```markdown
-# leetcode-rag-tutor 🤖
+# LeetCode-RAG-Tutor 🤖
 
 Built a small local RAG engine over a weekend to make LeetCode revision less painful. Instead of scrolling through long notes and old solutions, I wanted a way to search my personal DSA knowledge base and quickly retrieve patterns, dry-runs, code snippets, and mnemonics from my markdown notes.
 
